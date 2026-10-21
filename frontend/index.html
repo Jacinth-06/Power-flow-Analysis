@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Interactive N-Bus Power Flow & Voltage Stability Visualizer — Learn power system physics through visual intuition with dynamic Y-Bus, Jacobian, Newton-Raphson animations." />
+  <title>PowerFlow HUD — N-Bus Power Flow & Voltage Stability Visualizer</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ===== HEADER ===== -->
+  <header class="header">
+    <div class="header-logo">
+      <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="14" cy="14" r="12" stroke="cyan" stroke-width="1.5" opacity="0.6"/>
+        <circle cx="14" cy="14" r="6" stroke="magenta" stroke-width="1.5" opacity="0.6"/>
+        <path d="M14 2 L14 26 M2 14 L26 14" stroke="cyan" stroke-width="0.5" opacity="0.3"/>
+        <circle cx="14" cy="14" r="2.5" fill="cyan" opacity="0.8"/>
+        <circle cx="14" cy="5" r="1.5" fill="cyan" opacity="0.6"/>
+        <circle cx="14" cy="23" r="1.5" fill="magenta" opacity="0.6"/>
+        <circle cx="5" cy="14" r="1.5" fill="cyan" opacity="0.6"/>
+        <circle cx="23" cy="14" r="1.5" fill="magenta" opacity="0.6"/>
+      </svg>
+      <h1>PowerFlow HUD</h1>
+    </div>
+
+    <div class="header-presets">
+      <label>Topology:</label>
+      <button class="preset-btn" data-preset="2bus" id="preset-2bus">2-Bus</button>
+      <button class="preset-btn active" data-preset="3bus" id="preset-3bus">3-Bus</button>
+      <button class="preset-btn" data-preset="5bus" id="preset-5bus">5-Bus IEEE</button>
+      <button class="preset-btn" data-preset="blank" id="preset-blank">Blank</button>
+    </div>
+
+    <div class="header-status">
+      <div class="status-indicator">
+        <div class="status-dot idle" id="statusDot"></div>
+        <span id="statusText">Idle</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===== MAIN CONTENT ===== -->
+  <div class="main-content">
+
+    <!-- ===== SIDEBAR ===== -->
+    <aside class="sidebar">
+      <div class="sidebar-tabs">
+        <button class="sidebar-tab active" data-tab="topology" id="tab-topology">Topology</button>
+        <button class="sidebar-tab" data-tab="solver" id="tab-solver">Solver</button>
+        <button class="sidebar-tab" data-tab="analytics" id="tab-analytics">Analytics</button>
+      </div>
+
+      <div class="sidebar-content">
+
+        <!-- TOPOLOGY TAB -->
+        <div class="sidebar-panel active" id="panel-topology">
+          <!-- Add Bus -->
+          <div class="panel-card">
+            <div class="panel-card-header">
+              <span class="panel-card-title">Add Bus</span>
+            </div>
+            <div class="form-row">
+              <label>Type</label>
+              <select class="form-select" id="newBusType">
+                <option value="2">PQ Load</option>
+                <option value="1">PV Generator</option>
+                <option value="0">Slack Bus</option>
+              </select>
+            </div>
+            <button class="btn btn-primary btn-block btn-sm" id="addBusBtn">＋ Add Bus to Canvas</button>
+          </div>
+
+          <!-- Add Line -->
+          <div class="panel-card">
+            <div class="panel-card-header">
+              <span class="panel-card-title">Add Line</span>
+            </div>
+            <div class="form-row">
+              <label>From</label>
+              <select class="form-select" id="lineFromBus"></select>
+            </div>
+            <div class="form-row">
+              <label>To</label>
+              <select class="form-select" id="lineToBus"></select>
+            </div>
+            <div class="form-row">
+              <label>R</label>
+              <input class="form-input" id="lineR" type="number" value="0.02" step="0.01" min="0" />
+            </div>
+            <div class="form-row">
+              <label>X</label>
+              <input class="form-input" id="lineX" type="number" value="0.06" step="0.01" min="0.001" />
+            </div>
+            <div class="form-row">
+              <label>B</label>
+              <input class="form-input" id="lineB" type="number" value="0.03" step="0.01" min="0" />
+            </div>
+            <div class="form-row">
+              <label>Rating</label>
+              <input class="form-input" id="lineRating" type="number" value="2.0" step="0.1" min="0.1" />
+            </div>
+            <button class="btn btn-accent btn-block btn-sm" id="addLineBtn">＋ Add Transmission Line</button>
+          </div>
+
+          <!-- Bus List -->
+          <div class="panel-card">
+            <div class="panel-card-header">
+              <span class="panel-card-title">Buses</span>
+              <span class="panel-card-badge" id="busCount">0</span>
+            </div>
+            <div id="busList"></div>
+          </div>
+
+          <!-- Line List -->
+          <div class="panel-card">
+            <div class="panel-card-header">
+              <span class="panel-card-title">Lines</span>
+              <span class="panel-card-badge" id="lineCount">0</span>
+            </div>
+            <div id="lineList"></div>
+          </div>
+        </div>
+
+        <!-- SOLVER TAB -->
+        <div class="sidebar-panel" id="panel-solver">
+          <div class="panel-card">
+            <div class="panel-card-header">
+              <span class="panel-card-title">Solver Control</span>
+            </div>
+
+            <div class="iteration-display">
+              <div>
+                <div class="iteration-count" id="iterCount">0</div>
+                <div class="iteration-label">Iteration</div>
+              </div>
+              <div style="flex:1;">
+                <div class="iteration-label">Max Mismatch</div>
+                <div class="mismatch-value bad" id="mismatchValue">—</div>
+              </div>
+            </div>
+
+            <div class="btn-group" style="margin-bottom:10px;">
+              <button class="btn btn-primary" id="stepSolveBtn">⏭ Step (k+1)</button>
+              <button class="btn btn-success" id="autoSolveBtn">▶ Auto Solve</button>
+              <button class="btn btn-danger btn-sm" id="resetSolverBtn">↺ Reset</button>
+            </div>
+
+            <div class="form-row">
+              <label>Auto</label>
+              <label class="toggle-switch">
+                <input type="checkbox" id="autoSolveToggle" />
+                <span class="toggle-slider"></span>
+              </label>
+              <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);">Auto-solve on change</span>
+            </div>
+          </div>
+
+          <div class="panel-card">
+            <div class="panel-card-header">
+              <span class="panel-card-title">Settings</span>
+            </div>
+            <div class="form-row">
+              <label>Tol</label>
+              <input class="form-input" id="solverTolerance" type="number" value="0.000001" step="0.000001" min="0.0000001" />
+            </div>
+            <div class="form-row">
+              <label>Max It</label>
+              <input class="form-input" id="solverMaxIter" type="number" value="50" step="1" min="1" max="200" />
+            </div>
+            <button class="btn btn-ghost btn-sm btn-block" id="applySettingsBtn">Apply Settings</button>
+          </div>
+
+          <!-- Load Scaling -->
+          <div class="panel-card">
+            <div class="panel-card-header">
+              <span class="panel-card-title">Load Scaling</span>
+            </div>
+            <div class="slider-container">
+              <div class="slider-header">
+                <span class="slider-label">System Loading</span>
+                <span class="slider-value" id="loadScaleValue">100%</span>
+              </div>
+              <input type="range" id="loadScaleSlider" min="0" max="300" value="100" step="5" />
+            </div>
+            <button class="btn btn-accent btn-sm btn-block" id="applyLoadScale">Apply & Solve</button>
+          </div>
+
+          <!-- P-V Curve -->
+          <div class="panel-card">
+            <div class="panel-card-header">
+              <span class="panel-card-title">P-V Nose Curve</span>
+            </div>
+            <div class="form-row">
+              <label>Bus</label>
+              <select class="form-select" id="pvBusSelect"></select>
+            </div>
+            <button class="btn btn-primary btn-sm btn-block" id="computePVBtn">Compute P-V Curve</button>
+          </div>
+        </div>
+
+        <!-- ANALYTICS TAB -->
+        <div class="sidebar-panel" id="panel-analytics">
+          <div class="panel-card">
+            <div class="panel-card-header">
+              <span class="panel-card-title">System Summary</span>
+            </div>
+            <div class="analytics-grid" id="analyticsGrid">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+
+          <!-- Selected Bus Editor -->
+          <div class="panel-card" id="busEditorCard" style="display:none;">
+            <div class="panel-card-header">
+              <span class="panel-card-title">Bus Editor</span>
+              <span class="panel-card-badge" id="busEditorId">—</span>
+            </div>
+            <div class="form-row">
+              <label>Type</label>
+              <select class="form-select" id="editBusType">
+                <option value="0">Slack</option>
+                <option value="1">PV Gen</option>
+                <option value="2">PQ Load</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label>|V|</label>
+              <input class="form-input" id="editBusV" type="number" value="1.0" step="0.01" min="0.5" max="1.5" />
+            </div>
+            <div class="form-row">
+              <label>P Gen</label>
+              <input class="form-input" id="editBusPGen" type="number" value="0" step="0.05" />
+            </div>
+            <div class="form-row">
+              <label>Q Gen</label>
+              <input class="form-input" id="editBusQGen" type="number" value="0" step="0.05" />
+            </div>
+            <div class="form-row">
+              <label>P Load</label>
+              <input class="form-input" id="editBusPLoad" type="number" value="0" step="0.05" min="0" />
+            </div>
+            <div class="form-row">
+              <label>Q Load</label>
+              <input class="form-input" id="editBusQLoad" type="number" value="0" step="0.05" />
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-primary btn-sm" id="updateBusBtn" style="flex:1;">Update Bus</button>
+              <button class="btn btn-danger btn-sm" id="deleteBusBtn">Delete</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </aside>
+
+    <!-- ===== CANVAS ===== -->
+    <div class="canvas-container">
+      <div class="canvas-wrapper">
+        <canvas id="powerCanvas"></canvas>
+        <div class="canvas-mode-indicator" id="canvasMode">Select / Drag</div>
+        <div class="canvas-controls">
+          <button class="canvas-control-btn" id="zoomInBtn" title="Zoom In">＋</button>
+          <button class="canvas-control-btn" id="zoomOutBtn" title="Zoom Out">－</button>
+          <button class="canvas-control-btn" id="resetViewBtn" title="Reset View">⊞</button>
+        </div>
+      </div>
+
+      <!-- ===== BOTTOM PANEL ===== -->
+      <div class="bottom-panel">
+        <div class="bottom-resize-handle" id="bottomResizeHandle"></div>
+        <div class="bottom-tabs">
+          <button class="bottom-tab active" data-btab="ybus" id="btab-ybus">Y-Bus Matrix</button>
+          <button class="bottom-tab" data-btab="jacobian" id="btab-jacobian">Jacobian [J]</button>
+          <button class="bottom-tab" data-btab="convergence" id="btab-convergence">Convergence</button>
+          <button class="bottom-tab" data-btab="pvcurve" id="btab-pvcurve">P-V Curve</button>
+        </div>
+        <div class="bottom-content">
+          <!-- Y-Bus Panel -->
+          <div class="bottom-panel-inner active" id="bpanel-ybus">
+            <div class="matrix-container" id="ybusMatrixContainer">
+              <p style="color:var(--text-muted); font-family:var(--font-mono); font-size:11px;">Load a topology to see the Y-Bus matrix</p>
+            </div>
+          </div>
+          <!-- Jacobian Panel -->
+          <div class="bottom-panel-inner" id="bpanel-jacobian">
+            <div class="jacobian-grid" id="jacobianGrid">
+              <div class="jacobian-sub"><div class="jacobian-sub-title">J₁₁ = ∂P/∂θ</div><div id="j11Container"></div></div>
+              <div class="jacobian-sub"><div class="jacobian-sub-title">J₁₂ = ∂P/∂|V|</div><div id="j12Container"></div></div>
+              <div class="jacobian-sub"><div class="jacobian-sub-title">J₂₁ = ∂Q/∂θ</div><div id="j21Container"></div></div>
+              <div class="jacobian-sub"><div class="jacobian-sub-title">J₂₂ = ∂Q/∂|V|</div><div id="j22Container"></div></div>
+            </div>
+          </div>
+          <!-- Convergence Panel -->
+          <div class="bottom-panel-inner" id="bpanel-convergence">
+            <canvas id="convergenceChart"></canvas>
+          </div>
+          <!-- P-V Curve Panel -->
+          <div class="bottom-panel-inner" id="bpanel-pvcurve">
+            <canvas id="pvCurveChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- Tooltip Overlay -->
+<div class="tooltip-overlay" id="tooltipOverlay">
+  <div class="tooltip-title" id="tooltipTitle"></div>
+  <div class="tooltip-body" id="tooltipBody"></div>
+</div>
+
+<!-- Voltage Collapse Alert -->
+<div class="voltage-collapse-alert" id="collapseAlert">
+  <h2>⚡ Voltage Collapse Impending ⚡</h2>
+  <p>Saddle-node bifurcation detected — Maximum power transfer point reached</p>
+</div>
+
+<script src="/static/js/app.js"></script>
+
+</body>
+</html>
